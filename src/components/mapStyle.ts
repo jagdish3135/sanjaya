@@ -5,8 +5,11 @@ import type { ExpressionSpecification, StyleSpecification } from "maplibre-gl";
 
 export const PALETTE = {
   ocean: "#0b0f22",
-  land: "#1a181d",
-  border: "rgba(201, 162, 74, 0.42)",
+  land: "#1e1b22",
+  india: "#2a2219", // warmer and a touch brighter, so India stands out
+  indiaLine: "#f2a33a",
+  indiaStates: "rgba(242, 193, 120, 0.4)",
+  border: "rgba(201, 162, 74, 0.5)",
   borderState: "rgba(201, 162, 74, 0.16)",
   label: "rgba(239, 230, 210, 0.62)",
   labelDim: "rgba(239, 230, 210, 0.38)",
@@ -16,6 +19,9 @@ export const PALETTE = {
   shallow: "#e8432a",
   intermediate: "#f2a33a",
   deep: "#8fb3e8",
+  jade: "#7fd1b9",
+  brass: "#c9a24a",
+  cable: "rgba(201, 162, 74, 0.5)",
 };
 
 const FONT = ["Noto Sans Regular"];
@@ -65,6 +71,9 @@ export function buildStyle(): StyleSpecification {
     sources: {
       omt: { type: "vector", url: "https://tiles.openfreemap.org/planet" },
       graticule: { type: "geojson", data: graticule() },
+      india: { type: "geojson", data: "/geo/india.geojson" },
+      "india-states": { type: "geojson", data: "/geo/india-states.geojson" },
+      "india-state-labels": { type: "geojson", data: "/geo/india-state-labels.geojson" },
     },
     layers: [
       { id: "land", type: "background", paint: { "background-color": PALETTE.land } },
@@ -76,6 +85,72 @@ export function buildStyle(): StyleSpecification {
         filter: ["!=", ["get", "brunnel"], "tunnel"],
         paint: { "fill-color": PALETTE.ocean, "fill-antialias": false },
       },
+      {
+        id: "border-state",
+        type: "line",
+        source: "omt",
+        "source-layer": "boundary",
+        minzoom: 3.5,
+        filter: ["all", ["==", ["get", "admin_level"], 4], ["!=", ["get", "maritime"], 1]],
+        paint: { "line-color": PALETTE.borderState, "line-width": 0.7, "line-dasharray": [3, 2] },
+      },
+      {
+        // Disputed lines are left out so no de facto line is drawn through a claimed region.
+        id: "border-country",
+        type: "line",
+        source: "omt",
+        "source-layer": "boundary",
+        filter: [
+          "all",
+          ["==", ["get", "admin_level"], 2],
+          ["!=", ["get", "maritime"], 1],
+          ["!=", ["get", "disputed"], 1],
+          ["!", ["has", "claimed_by"]],
+        ],
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: {
+          "line-color": PALETTE.border,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 1, 0.6, 6, 1.4],
+        },
+      },
+
+      // India with its official boundary (Survey of India, via DataMeet). The solid fill
+      // covers other countries' lines inside India's outline; India's own states go on top.
+      { id: "india", type: "fill", source: "india", paint: { "fill-color": PALETTE.india } },
+      {
+        id: "india-water",
+        type: "fill",
+        source: "omt",
+        "source-layer": "water",
+        filter: ["!=", ["get", "brunnel"], "tunnel"],
+        paint: { "fill-color": PALETTE.ocean, "fill-antialias": false },
+      },
+      {
+        id: "india-states",
+        type: "line",
+        source: "india-states",
+        minzoom: 2.4,
+        paint: {
+          "line-color": PALETTE.indiaStates,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 2.4, 0.4, 6, 1.1],
+          "line-dasharray": [3, 2],
+        },
+      },
+      {
+        id: "india-glow",
+        type: "line",
+        source: "india",
+        layout: { "line-join": "round" },
+        paint: { "line-color": PALETTE.indiaLine, "line-opacity": 0.28, "line-width": 7, "line-blur": 6 },
+      },
+      {
+        id: "india-line",
+        type: "line",
+        source: "india",
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: { "line-color": PALETTE.indiaLine, "line-width": ["interpolate", ["linear"], ["zoom"], 1, 1, 6, 1.8] },
+      },
+
       {
         id: "grid",
         type: "line",
@@ -107,32 +182,19 @@ export function buildStyle(): StyleSpecification {
         paint: { "text-color": "rgba(226, 69, 43, 0.6)", "text-halo-color": PALETTE.halo, "text-halo-width": 1 },
       },
       {
-        id: "border-state",
-        type: "line",
-        source: "omt",
-        "source-layer": "boundary",
-        minzoom: 3.5,
-        filter: ["all", ["==", ["get", "admin_level"], 4], ["!=", ["get", "maritime"], 1]],
-        paint: { "line-color": PALETTE.borderState, "line-width": 0.7, "line-dasharray": [3, 2] },
-      },
-      {
-        // Disputed lines are left out so no de facto line is drawn through a claimed region.
-        id: "border-country",
-        type: "line",
-        source: "omt",
-        "source-layer": "boundary",
-        filter: [
-          "all",
-          ["==", ["get", "admin_level"], 2],
-          ["!=", ["get", "maritime"], 1],
-          ["!=", ["get", "disputed"], 1],
-          ["!", ["has", "claimed_by"]],
-        ],
-        layout: { "line-join": "round", "line-cap": "round" },
-        paint: {
-          "line-color": PALETTE.border,
-          "line-width": ["interpolate", ["linear"], ["zoom"], 1, 0.6, 6, 1.4],
+        id: "india-state-labels",
+        type: "symbol",
+        source: "india-state-labels",
+        minzoom: 3.6,
+        layout: {
+          "text-field": ["get", "name"],
+          "text-font": FONT,
+          "text-size": ["interpolate", ["linear"], ["zoom"], 3.6, 9, 7, 13],
+          "text-transform": "uppercase",
+          "text-letter-spacing": 0.12,
+          "text-max-width": 7,
         },
+        paint: { "text-color": "rgba(242, 193, 120, 0.55)", "text-halo-color": PALETTE.halo, "text-halo-width": 1 },
       },
       {
         id: "label-country",

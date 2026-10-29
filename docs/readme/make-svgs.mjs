@@ -109,7 +109,7 @@ function stars(w, h, t, n = 60, seed = 7) {
 
 function banner(t) {
   const W = 1280, H = 420;
-  const chips = ["Live earthquakes", "USGS + EMSC", "India-first", "Free & open data"];
+  const chips = ["7 live layers", "Quakes to satellites", "India-first", "Free & open data"];
   let cx = 92;
   const chipSvg = chips.map((c) => {
     const w = c.length * 8.6 + 30;
@@ -151,11 +151,11 @@ ${lines.map((l, i) => `<text x="${x + 22}" y="${174 + i * 25}" ${B} font-size="1
 <rect width="${W}" height="${H}" fill="${t.bg}"/>
 ${stars(W, H, t, 30, 3)}
 <text x="40" y="40" ${M} font-size="12" fill="${t.faint}" letter-spacing="3">HOW IT WORKS</text>
-${box(40, "1 · FREE PUBLIC FEEDS", "USGS + EMSC", ["Earthquakes worldwide, M2.5+", "GeoJSON and FDSN, no API key"], t.saffron)}
+${box(40, "1 · FREE PUBLIC FEEDS", "Open data", ["USGS, CelesTrak, GDACS, NASA,", "Open-Meteo, TeleGeography"], t.saffron)}
 ${arrow(392)}
-${box(470, "2 · /API/EARTHQUAKES", "Clean and merge", ["One shape for both feeds", "Duplicates joined · 60 s cache"], t.sindoor)}
+${box(470, "2 · ONE API ROUTE PER FEED", "Clean and cache", ["One small shape per feed", "Retries · cached 1 min to 24 h"], t.sindoor)}
 ${arrow(822)}
-${box(900, "3 · YOUR BROWSER", "The globe", ["MapLibre GL, refreshed every minute", "Narrated, filtered, India-first"], t.nila)}
+${box(900, "3 · YOUR BROWSER", "The globe", ["7 layers, orbits worked out live", "Narrated, filtered, India-first"], t.nila)}
 </svg>`;
 }
 

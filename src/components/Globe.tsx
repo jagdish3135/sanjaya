@@ -1,13 +1,20 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { Map as MLMap, NavigationControl, setWorkerUrl, type GeoJSONSource } from "maplibre-gl";
+import { useEffect, useRef, useState } from "react";
+import { Map as MLMap, NavigationControl, setWorkerUrl, type MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { buildStyle } from "./mapStyle";
+import {
+  CLICK_TARGETS, MAG_RADIUS, SELECTED_LAYER, STYLE_LAYERS,
+  addDataLayers, disastersGeo, firesGeo, quakesGeo, setDayNight, setSource, windGeo,
+  type LayerId, type Selection, type SelectionKind,
+} from "./mapLayers";
+import type { Quake } from "@/lib/quakes";
+import type { Disaster, Fire, WindPoint } from "@/lib/hazards";
+import { groundTrack, satState, type Sat } from "@/lib/satellites";
 
 // Served from public/ (copied there by scripts/copy-maplibre-worker.mjs).
 setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
-import { buildStyle, PALETTE } from "./mapStyle";
-import type { Quake } from "@/lib/quakes";
 
 export interface FlyTarget {
   lon: number;
@@ -16,221 +23,236 @@ export interface FlyTarget {
   key: number; // changes on every request so the same place can be revisited
 }
 
-interface Props {
+export interface CableData {
+  cables: GeoJSON.FeatureCollection;
+  landings: GeoJSON.FeatureCollection;
+}
+
+export interface GlobeData {
   quakes: Quake[];
-  visible: boolean;
-  selectedId: string | null;
+  disasters: Disaster[];
+  fires: Fire[];
+  wind: WindPoint[];
+  cables: CableData | null;
+  sats: Sat[];
+}
+
+interface Props {
+  data: GlobeData;
+  visible: Record<LayerId, boolean>;
+  weather: { rain: boolean; wind: boolean };
+  selection: Selection | null;
   flyTarget: FlyTarget | null;
-  onSelect: (id: string | null) => void;
+  onSelect: (sel: Selection | null) => void;
   onBearing: (deg: number) => void;
 }
 
 export const INDIA_VIEW = { lon: 79, lat: 21.5 };
 
-const RECENT_MS = 60 * 60_000;
-const QUAKE_LAYERS = ["quakes-glow", "quakes", "quakes-pulse", "quakes-selected", "quakes-label"];
-
-// Radius by magnitude, then scaled up a little as you zoom in.
-const MAG_RADIUS = [
-  "interpolate", ["exponential", 1.6], ["get", "mag"],
-  2.5, 2.4, 4, 4.5, 5, 7.5, 6, 12, 7, 19, 8, 28,
-] as const;
-const radius = (k: number, add = 0) => [
-  "interpolate", ["linear"], ["zoom"],
-  1, ["+", add, ["*", 0.85 * k, MAG_RADIUS]],
-  6, ["+", add, ["*", 1.5 * k, MAG_RADIUS]],
-];
-const DEPTH_COLOR = [
-  "step", ["get", "depth"],
-  PALETTE.shallow, 70, PALETTE.intermediate, 300, PALETTE.deep,
-] as const;
-
-function toGeoJSON(quakes: Quake[], now: number): GeoJSON.FeatureCollection {
-  return {
-    type: "FeatureCollection",
-    features: quakes.map((q) => ({
-      type: "Feature",
-      id: q.id,
-      properties: {
-        id: q.id,
-        mag: q.mag,
-        depth: q.depth,
-        recent: now - q.time < RECENT_MS,
-        label: q.mag >= 5 ? q.mag.toFixed(1) : "",
-      },
-      geometry: { type: "Point", coordinates: [q.lon, q.lat] },
-    })),
-  };
-}
-
-export default function Globe({ quakes, visible, selectedId, flyTarget, onSelect, onBearing }: Props) {
+export default function Globe({ data, visible, weather, selection, flyTarget, onSelect, onBearing }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
-  const ready = useRef(false);
-  const latest = useRef({ quakes, visible, selectedId, onSelect, onBearing });
-  latest.current = { quakes, visible, selectedId, onSelect, onBearing };
+  // Turns 1 once the map has loaded, so the data effects below run again then.
+  const [readyTick, setReadyTick] = useState(0);
+  const latest = useRef({ data, visible, selection, onSelect, onBearing });
+  latest.current = { data, visible, selection, onSelect, onBearing };
 
   // Create the map once.
   useEffect(() => {
     if (!box.current) return;
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const narrow = window.innerWidth < 820;
+    let ready = false;
 
     const map = new MLMap({
       container: box.current,
       style: buildStyle(),
       center: reduceMotion ? [INDIA_VIEW.lon, INDIA_VIEW.lat] : [INDIA_VIEW.lon - 70, 12],
       zoom: narrow ? 1.15 : 1.75,
-      attributionControl: { compact: true, customAttribution: "Quakes: USGS · EMSC" },
+      attributionControl: {
+        compact: true,
+        customAttribution: "Quakes: USGS · EMSC | Orbits: CelesTrak | Disasters: GDACS | Fires: NASA FIRMS | Wind: Open-Meteo | Cables: TeleGeography | India boundary: DataMeet (Survey of India)",
+      },
       maxPitch: 60,
     });
     mapRef.current = map;
     map.addControl(new NavigationControl({ visualizePitch: true }), "bottom-right");
+    // Lets browser tests find features on the map; left out of production builds.
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __sanjayaMap: MLMap }).__sanjayaMap = map;
 
     map.on("load", () => {
-      map.addSource("quakes", { type: "geojson", data: toGeoJSON([], Date.now()) });
-      map.addLayer({
-        id: "quakes-glow",
-        type: "circle",
-        source: "quakes",
-        paint: {
-          "circle-radius": radius(2.4) as never,
-          "circle-color": DEPTH_COLOR as never,
-          "circle-blur": 1,
-          "circle-opacity": 0.22,
-        },
-      });
-      map.addLayer({
-        id: "quakes",
-        type: "circle",
-        source: "quakes",
-        paint: {
-          "circle-radius": radius(1) as never,
-          "circle-color": DEPTH_COLOR as never,
-          "circle-opacity": 0.9,
-          "circle-stroke-color": "rgba(239, 230, 210, 0.55)",
-          "circle-stroke-width": 0.6,
-        },
-      });
-      map.addLayer({
-        id: "quakes-pulse",
-        type: "circle",
-        source: "quakes",
-        filter: ["==", ["get", "recent"], true],
-        paint: {
-          "circle-radius": radius(1) as never,
-          "circle-color": "rgba(0,0,0,0)",
-          "circle-stroke-color": DEPTH_COLOR as never,
-          "circle-stroke-width": 1.4,
-          "circle-stroke-opacity": 0.8,
-        },
-      });
-      map.addLayer({
-        id: "quakes-selected",
-        type: "circle",
-        source: "quakes",
-        filter: ["==", ["get", "id"], ""],
-        paint: {
-          "circle-radius": radius(1, 7) as never,
-          "circle-color": "rgba(0,0,0,0)",
-          "circle-stroke-color": "#e9c46a",
-          "circle-stroke-width": 1.6,
-        },
-      });
-      map.addLayer({
-        id: "quakes-label",
-        type: "symbol",
-        source: "quakes",
-        minzoom: 2.2,
-        filter: ["!=", ["get", "label"], ""],
-        layout: {
-          "text-field": ["concat", "M", ["get", "label"]],
-          "text-font": ["Noto Sans Regular"],
-          "text-size": 10,
-          "text-offset": [0, 1.6],
-          "text-letter-spacing": 0.08,
-        },
-        paint: { "text-color": "#efe6d2", "text-halo-color": "rgba(8,9,18,0.9)", "text-halo-width": 1.2 },
-      });
-
-      ready.current = true;
-      syncData();
-      syncSelection();
-
-      // On phones, start with the map credits folded into the (i) button.
-      if (narrow) {
-        map.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
-      }
-
+      addDataLayers(map);
+      ready = true;
+      setReadyTick(1);
+      if (narrow) map.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
       if (!reduceMotion) {
         map.easeTo({ center: [INDIA_VIEW.lon, INDIA_VIEW.lat], duration: 2800, easing: (t) => 1 - (1 - t) ** 3 });
       }
     });
 
-    map.on("click", "quakes", (e) => {
-      const id = e.features?.[0]?.properties?.id;
-      if (typeof id === "string") latest.current.onSelect(id);
+    // Clicks pick the top-most thing under the pointer; empty space clears the selection.
+    // Exactly under the pointer first, then a few pixels around it (small dots are hard to hit).
+    const hitAt = (e: MapMouseEvent) => {
+      for (const pad of [0, 6]) {
+        const bbox: [[number, number], [number, number]] = [[e.point.x - pad, e.point.y - pad], [e.point.x + pad, e.point.y + pad]];
+        for (const t of CLICK_TARGETS) {
+          if (!map.getLayer(t.layer)) continue;
+          const hits = map.queryRenderedFeatures(bbox, { layers: [t.layer] });
+          // Docked capsules and modules sit on the station; pick the station itself.
+          const hit = hits.find((h) => h.properties?.short === "ISS" || h.properties?.short === "CSS") ?? hits[0];
+          const id = hit?.properties?.id;
+          if (id !== undefined) return { kind: t.kind, id: String(id) };
+        }
+      }
+      return null;
+    };
+    map.on("click", (e) => ready && latest.current.onSelect(hitAt(e)));
+    map.on("mousemove", (e) => {
+      if (ready) map.getCanvas().style.cursor = hitAt(e) ? "pointer" : "";
     });
-    map.on("click", (e) => {
-      const hits = map.queryRenderedFeatures(e.point, { layers: ["quakes"] });
-      if (hits.length === 0) latest.current.onSelect(null);
-    });
-    map.on("mouseenter", "quakes", () => (map.getCanvas().style.cursor = "pointer"));
-    map.on("mouseleave", "quakes", () => (map.getCanvas().style.cursor = ""));
     map.on("rotate", () => latest.current.onBearing(map.getBearing()));
 
-    // Pulse the rings of quakes from the last hour.
+    // One animation loop: pulse recent quakes, and move satellites a chunk at a time
+    // so thousands of orbits never freeze the page.
     let raf = 0;
-    let last = 0;
+    let lastPulse = 0;
+    let satList: Sat[] = [];
+    let satFeatures: (GeoJSON.Feature | null)[] = [];
+    let satIdx = 0;
+    let lastPush = 0;
     const tick = (t: number) => {
       raf = requestAnimationFrame(tick);
-      if (!ready.current || t - last < 40) return;
-      last = t;
-      const p = (t % 2200) / 2200;
-      map.setPaintProperty("quakes-pulse", "circle-radius", ["*", 1 + p * 2.6, MAG_RADIUS] as never);
-      map.setPaintProperty("quakes-pulse", "circle-stroke-opacity", 0.85 * (1 - p));
+      if (!ready) return;
+      const { visible: vis, data: d } = latest.current;
+
+      if (!reduceMotion && vis.earthquakes && t - lastPulse > 40) {
+        lastPulse = t;
+        const p = (t % 2200) / 2200;
+        map.setPaintProperty("quakes-pulse", "circle-radius", ["*", 1 + p * 2.6, MAG_RADIUS]);
+        map.setPaintProperty("quakes-pulse", "circle-stroke-opacity", 0.85 * (1 - p));
+      }
+
+      if (d.sats !== satList) {
+        satList = d.sats;
+        satFeatures = new Array(satList.length).fill(null);
+        satIdx = 0;
+        lastPush = 0;
+        if (satList.length === 0) setSource(map, "sats", { type: "FeatureCollection", features: [] });
+      }
+      if (vis.satellites && satList.length) {
+        const now = new Date();
+        const end = Math.min(satList.length, satIdx + 1200);
+        for (; satIdx < end; satIdx++) {
+          const s = satList[satIdx];
+          const st = satState(s.rec, now);
+          satFeatures[satIdx] = st && {
+            type: "Feature",
+            properties: { id: s.id, group: s.group, short: s.short },
+            geometry: { type: "Point", coordinates: [st.lon, st.lat] },
+          };
+        }
+        if (satIdx >= satList.length) {
+          satIdx = 0;
+          const every = satList.length > 3000 ? 2000 : 1000;
+          if (t - lastPush > every) {
+            lastPush = t;
+            // Draw the ISS and Tiangong last, on top of the capsules docked to them, so a click picks the station.
+            const features = satFeatures.filter((f): f is GeoJSON.Feature => !!f);
+            const isStation = (f: GeoJSON.Feature) => f.properties?.short === "ISS" || f.properties?.short === "CSS";
+            setSource(map, "sats", { type: "FeatureCollection", features: [...features.filter((f) => !isStation(f)), ...features.filter(isStation)] });
+          }
+        }
+      }
     };
-    if (!reduceMotion) raf = requestAnimationFrame(tick);
+    raf = requestAnimationFrame(tick);
 
     return () => {
       cancelAnimationFrame(raf);
-      ready.current = false;
       map.remove();
       mapRef.current = null;
     };
   }, []);
 
-  function syncData() {
-    const map = mapRef.current;
-    if (!map || !ready.current) return;
-    (map.getSource("quakes") as GeoJSONSource).setData(toGeoJSON(latest.current.quakes, Date.now()));
-    for (const id of QUAKE_LAYERS) {
-      map.setLayoutProperty(id, "visibility", latest.current.visible ? "visible" : "none");
+  const mapIfReady = () => (readyTick ? mapRef.current : null);
+
+  useEffect(() => {
+    const m = mapIfReady();
+    if (m) setSource(m, "quakes", quakesGeo(data.quakes, Date.now()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.quakes, readyTick]);
+  useEffect(() => {
+    const m = mapIfReady();
+    if (m) setSource(m, "disasters", disastersGeo(data.disasters));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.disasters, readyTick]);
+  useEffect(() => {
+    const m = mapIfReady();
+    if (m) setSource(m, "fires", firesGeo(data.fires));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.fires, readyTick]);
+  useEffect(() => {
+    const m = mapIfReady();
+    if (m) setSource(m, "wind", windGeo(data.wind));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.wind, readyTick]);
+  useEffect(() => {
+    const m = mapIfReady();
+    if (!m || !data.cables) return;
+    setSource(m, "cables", data.cables.cables);
+    setSource(m, "cable-landings", data.cables.landings);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.cables, readyTick]);
+
+  // Layer visibility (weather has two parts).
+  useEffect(() => {
+    const m = mapIfReady();
+    if (!m) return;
+    for (const [layer, ids] of Object.entries(STYLE_LAYERS) as [LayerId, string[]][]) {
+      for (const id of ids) {
+        let on = visible[layer];
+        if (id === "rain") on &&= weather.rain;
+        if (id.startsWith("wind")) on &&= weather.wind;
+        m.setLayoutProperty(id, "visibility", on ? "visible" : "none");
+      }
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, weather.rain, weather.wind, readyTick]);
 
-  function syncSelection() {
+  // Day and night: redraw now and every minute.
+  useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready.current) return;
-    map.setFilter("quakes-selected", ["==", ["get", "id"], latest.current.selectedId ?? ""]);
-  }
+    if (!map || !readyTick || !visible.daynight) return;
+    setDayNight(map, new Date());
+    const t = setInterval(() => setDayNight(map, new Date()), 60_000);
+    return () => clearInterval(t);
+  }, [visible.daynight, readyTick]);
 
-  useEffect(syncData, [quakes, visible]);
-  useEffect(syncSelection, [selectedId]);
+  // Selection rings, plus the ground track of a selected satellite.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !readyTick) return;
+    for (const [kind, layer] of Object.entries(SELECTED_LAYER) as [SelectionKind, string][]) {
+      map.setFilter(layer, ["==", ["get", "id"], selection?.kind === kind ? selection.id : ""]);
+    }
+    const sat = selection?.kind === "sat" ? data.sats.find((s) => s.id === selection.id) : undefined;
+    const drawTrack = () =>
+      setSource(map, "sat-track", {
+        type: "Feature",
+        properties: {},
+        geometry: { type: "MultiLineString", coordinates: sat ? groundTrack(sat.rec, new Date(), Math.min(sat.periodMin, 200)) : [] },
+      });
+    drawTrack();
+    if (!sat) return;
+    const t = setInterval(drawTrack, 60_000);
+    return () => clearInterval(t);
+  }, [selection, data.sats, readyTick]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !flyTarget) return;
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    map.flyTo({
-      center: [flyTarget.lon, flyTarget.lat],
-      zoom: flyTarget.zoom,
-      speed: 0.9,
-      curve: 1.5,
-      animate: !reduceMotion,
-      essential: false,
-    });
+    map.flyTo({ center: [flyTarget.lon, flyTarget.lat], zoom: flyTarget.zoom, speed: 0.9, curve: 1.5, animate: !reduceMotion, essential: false });
   }, [flyTarget]);
 
-  return <div ref={box} className="globe" role="region" aria-label="Interactive globe showing live earthquakes" />;
+  return <div ref={box} className="globe" role="region" aria-label="Interactive globe of live world events" />;
 }

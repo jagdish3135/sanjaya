@@ -8,16 +8,16 @@
 <path d="M40 84 v-14 h14 M380 226 v14 h-14" stroke="#8a6a1f" stroke-width="2" fill="none"/>
 <rect x="40" y="70" width="340" height="3" fill="#c97a12"/>
 <text x="62" y="106" font-family="'Martian Mono'" font-size="11" fill="#8a6a1f" letter-spacing="2">1 · FREE PUBLIC FEEDS</text>
-<text x="62" y="140" font-family="'Rozha One'" font-size="26" fill="#1b1712">USGS + EMSC</text>
-<text x="62" y="174" font-family="'Mukta'" font-size="17" fill="rgba(27,23,18,0.72)">Earthquakes worldwide, M2.5+</text><text x="62" y="199" font-family="'Mukta'" font-size="17" fill="rgba(27,23,18,0.72)">GeoJSON and FDSN, no API key</text>
+<text x="62" y="140" font-family="'Rozha One'" font-size="26" fill="#1b1712">Open data</text>
+<text x="62" y="174" font-family="'Mukta'" font-size="17" fill="rgba(27,23,18,0.72)">USGS, CelesTrak, GDACS, NASA,</text><text x="62" y="199" font-family="'Mukta'" font-size="17" fill="rgba(27,23,18,0.72)">Open-Meteo, TeleGeography</text>
 <line x1="392" y1="155" x2="450" y2="155" stroke="#8a6a1f" stroke-width="1.5" stroke-dasharray="5 4"/><path d="M450 149 l10 6 l-10 6z" fill="#8a6a1f"/>
 
 <rect x="470" y="70" width="340" height="170" fill="#fbf7ee" stroke="rgba(138,106,31,0.4)"/>
 <path d="M470 84 v-14 h14 M810 226 v14 h-14" stroke="#8a6a1f" stroke-width="2" fill="none"/>
 <rect x="470" y="70" width="340" height="3" fill="#c7321c"/>
-<text x="492" y="106" font-family="'Martian Mono'" font-size="11" fill="#8a6a1f" letter-spacing="2">2 · /API/EARTHQUAKES</text>
-<text x="492" y="140" font-family="'Rozha One'" font-size="26" fill="#1b1712">Clean and merge</text>
-<text x="492" y="174" font-family="'Mukta'" font-size="17" fill="rgba(27,23,18,0.72)">One shape for both feeds</text><text x="492" y="199" font-family="'Mukta'" font-size="17" fill="rgba(27,23,18,0.72)">Duplicates joined · 60 s cache</text>
+<text x="492" y="106" font-family="'Martian Mono'" font-size="11" fill="#8a6a1f" letter-spacing="2">2 · ONE API ROUTE PER FEED</text>
+<text x="492" y="140" font-family="'Rozha One'" font-size="26" fill="#1b1712">Clean and cache</text>
+<text x="492" y="174" font-family="'Mukta'" font-size="17" fill="rgba(27,23,18,0.72)">One small shape per feed</text><text x="492" y="199" font-family="'Mukta'" font-size="17" fill="rgba(27,23,18,0.72)">Retries · cached 1 min to 24 h</text>
 <line x1="822" y1="155" x2="880" y2="155" stroke="#8a6a1f" stroke-width="1.5" stroke-dasharray="5 4"/><path d="M880 149 l10 6 l-10 6z" fill="#8a6a1f"/>
 
 <rect x="900" y="70" width="340" height="170" fill="#fbf7ee" stroke="rgba(138,106,31,0.4)"/>
@@ -25,5 +25,5 @@
 <rect x="900" y="70" width="340" height="3" fill="#3f6db3"/>
 <text x="922" y="106" font-family="'Martian Mono'" font-size="11" fill="#8a6a1f" letter-spacing="2">3 · YOUR BROWSER</text>
 <text x="922" y="140" font-family="'Rozha One'" font-size="26" fill="#1b1712">The globe</text>
-<text x="922" y="174" font-family="'Mukta'" font-size="17" fill="rgba(27,23,18,0.72)">MapLibre GL, refreshed every minute</text><text x="922" y="199" font-family="'Mukta'" font-size="17" fill="rgba(27,23,18,0.72)">Narrated, filtered, India-first</text>
+<text x="922" y="174" font-family="'Mukta'" font-size="17" fill="rgba(27,23,18,0.72)">7 layers, orbits worked out live</text><text x="922" y="199" font-family="'Mukta'" font-size="17" fill="rgba(27,23,18,0.72)">Narrated, filtered, India-first</text>
 </svg>
