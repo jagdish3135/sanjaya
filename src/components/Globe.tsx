@@ -157,6 +157,11 @@ export default function Globe({ quakes, visible, selectedId, flyTarget, onSelect
       syncData();
       syncSelection();
 
+      // On phones, start with the map credits folded into the (i) button.
+      if (narrow) {
+        map.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
+      }
+
       if (!reduceMotion) {
         map.easeTo({ center: [INDIA_VIEW.lon, INDIA_VIEW.lat], duration: 2800, easing: (t) => 1 - (1 - t) ** 3 });
       }

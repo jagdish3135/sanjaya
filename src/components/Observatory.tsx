@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Dial from "./Dial";
 import { INDIA_VIEW, type FlyTarget } from "./Globe";
 import { LayerPanel, Masthead, Narration, Sighting, type FeedState } from "./Panels";
-import { filterQuakes, type Quake, type Region, type TimeWindow } from "@/lib/quakes";
+import { WINDOW_MS, filterQuakes, type Quake, type Region, type TimeWindow } from "@/lib/quakes";
 
 const Globe = dynamic(() => import("./Globe"), { ssr: false });
 
@@ -14,8 +14,13 @@ const WINDOW_LABEL: Record<TimeWindow, string> = { hour: "hour", day: "24 hours"
 
 interface Payload {
   generated: number;
+  window: TimeWindow;
   quakes: Quake[];
 }
+
+/** While a new window loads, the list can only cover the narrower of the two windows. */
+const shownWindow = (asked: TimeWindow, loaded: TimeWindow | undefined): TimeWindow =>
+  loaded && WINDOW_MS[loaded] < WINDOW_MS[asked] ? loaded : asked;
 
 export default function Observatory() {
   const [quakesOn, setQuakesOn] = useState(true);
@@ -109,7 +114,7 @@ export default function Observatory() {
         selectedId={selectedId}
         onPick={pick}
         state={state}
-        windowLabel={WINDOW_LABEL[window]}
+        windowLabel={WINDOW_LABEL[shownWindow(window, data?.window)]}
       />
 
       {selected && <Sighting key={selected.id} quake={selected} onClose={closeSighting} />}

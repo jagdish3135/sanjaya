@@ -532,3 +532,15 @@ a { color: var(--brass-hi); }
 
 /* Keep the interface above MapLibre's controls (they use z-index 2). */
 .masthead, .panel, .sighting, .home-btn, .sheet-tabs { z-index: 3; }
+
+/* Soft fade behind the masthead so map labels never fight the title. */
+.observatory::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 150px;
+  background: linear-gradient(rgba(7, 8, 15, 0.92), rgba(7, 8, 15, 0.55) 55%, transparent);
+  pointer-events: none;
+  z-index: 2;
+}
+@media (max-width: 820px) { .observatory::after { height: 120px; } }
